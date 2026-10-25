@@ -129,6 +129,23 @@ class TestPixelFractionEngine(unittest.TestCase):
         self.assertIn("photographer", quest)
         self.assertIn("emoji", quest)
 
+    def test_admin_handling(self):
+        import bot
+        from unittest.mock import patch
+
+        # Case 1: ADMIN_ID is set
+        with patch.object(bot, "ADMIN_ID", "12345"):
+            self.assertTrue(bot.is_admin(12345))
+            self.assertTrue(bot.is_admin("12345"))
+            self.assertFalse(bot.is_admin(99999))
+            self.assertFalse(bot.is_admin("99999"))
+
+        # Case 2: ADMIN_ID is empty/missing -> treat as no admin
+        with patch.object(bot, "ADMIN_ID", ""):
+            self.assertFalse(bot.is_admin(12345))
+            self.assertFalse(bot.is_admin(0))
+            self.assertFalse(bot.is_admin(None))
+
 
 if __name__ == "__main__":
     unittest.main()

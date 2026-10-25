@@ -11,7 +11,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
-ADMIN_USER_ID = os.getenv("ADMIN_USER_ID", "").strip()
+ADMIN_ID = os.getenv("ADMIN_ID", "").strip()
 
 # Deployment settings
 PORT = int(os.getenv("PORT", "8080"))

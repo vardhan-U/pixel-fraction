@@ -12,7 +12,7 @@ from telegram.ext import (
 
 from config import (
     TELEGRAM_BOT_TOKEN,
-    ADMIN_USER_ID,
+    ADMIN_ID,
     PORT,
     WEBHOOK_URL,
     SECRET_TOKEN,
@@ -58,23 +58,9 @@ db = Database()
 
 
 def is_admin(user_id: int) -> bool:
-    # Check environment variable or runtime registered admin
-    effective_admin = db.state.get("admin_id") or ADMIN_USER_ID
-    if not effective_admin:
-        return True  # If no admin configured, allow demo control
-    return str(user_id) == str(effective_admin)
-
-
-async def setadmin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Allows the presenter to claim admin controls for the session."""
-    user = update.effective_user
-    db.state["admin_id"] = str(user.id)
-    db._save()
-    await update.message.reply_text(
-        f"👑 **Admin privileges granted to {user.first_name}** (`{user.id}`)!\n"
-        "You can now use `/forcequest` to override quests during the live presentation.",
-        parse_mode="Markdown"
-    )
+    if not ADMIN_ID:
+        return False
+    return str(user_id) == str(ADMIN_ID)
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -161,7 +147,7 @@ async def forcequest_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """Admin command to force a new quest for demo purposes."""
     user_id = update.effective_user.id
     if not is_admin(user_id):
-        await update.message.reply_text("⛔ Only the demo admin can force a new quest.")
+        await update.message.reply_text("Admins only.")
         return
 
     # Check if a specific color was requested: /forcequest red
@@ -344,7 +330,6 @@ def main():
     app.add_handler(CommandHandler("quest", quest_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command))
     app.add_handler(CommandHandler("myid", myid_command))
-    app.add_handler(CommandHandler("setadmin", setadmin_command))
     app.add_handler(CommandHandler("forcequest", forcequest_command))
     app.add_handler(CallbackQueryHandler(button_callback_handler))
     app.add_handler(MessageHandler(filters.PHOTO, photo_handler))

@@ -98,8 +98,9 @@ Pixel Fraction is an interactive Telegram community bot that gamifies everyday s
    ```env
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
    UNSPLASH_ACCESS_KEY=your_unsplash_access_key
-   ADMIN_USER_ID=your_telegram_numeric_id
+   ADMIN_ID=your_telegram_numeric_id
    ```
+   *(Note: Only the user whose Telegram ID matches `ADMIN_ID` can use `/forcequest`. Any non-admin attempting admin commands receives "Admins only.")*
 
 4. **Run Unit Tests:**
    ```bash
@@ -125,7 +126,7 @@ Pixel Fraction is an interactive Telegram community bot that gamifies everyday s
 5. Under **Environment Variables**, add:
    * `TELEGRAM_BOT_TOKEN` = `your_token`
    * `UNSPLASH_ACCESS_KEY` = `your_access_key`
-   * `ADMIN_USER_ID` = `your_numeric_id`
+   * `ADMIN_ID` = `your_numeric_id`
    * `WEBHOOK_URL` = `https://<your-service-name>.onrender.com`
    * `PORT` = `10000`
 6. Click **Create Web Service**. Render will deploy and connect to Telegram automatically!
