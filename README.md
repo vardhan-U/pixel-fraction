@@ -72,7 +72,8 @@ Pixel Fraction is an interactive Telegram community bot that gamifies everyday s
 | Command | Description |
 |---|---|
 | `/quest` | Displays today's color quest, target fraction, and Unsplash inspiration photo. |
-| `/leaderboard` | Shows the top players and active streaks in the chat. |
+| `/leaderboard` | Shows the top players and active streaks in the current chat. |
+| `/globalboard` | Shows the global leaderboard of top 15 players across all chats with stable tie-breaking and caller rank. |
 | `/myid` | Shows your Telegram numeric user ID. |
 | `/forcequest` | *(Admin only)* Force triggers a new color quest on the fly for live demos. |
 | `/help` | Explains rules and scoring breakdown. |

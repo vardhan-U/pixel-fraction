@@ -8,7 +8,7 @@ from color_engine import (
     compute_similarity,
     COLOR_DEFINITIONS,
 )
-from database import Database
+from database import Database, format_globalboard_text
 from quest_manager import QuestManager, FALLBACK_QUESTS
 
 
@@ -151,6 +151,129 @@ class TestPixelFractionEngine(unittest.TestCase):
         import bot  # imports and configures loggers
         self.assertGreaterEqual(logging.getLogger("httpx").level, logging.WARNING)
         self.assertGreaterEqual(logging.getLogger("httpcore").level, logging.WARNING)
+
+    def test_globalboard_empty_database(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "empty.json")
+            text = format_globalboard_text(db, caller_user_id=123)
+            self.assertEqual(text, "No scores yet. Be the first!")
+
+    def test_globalboard_fewer_than_15_players(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            # 5 players
+            for i in range(1, 6):
+                db.record_submission(100, i, f"Player{i}", i * 10)
+            
+            # Caller is Player 4 (score 40, rank 2)
+            text = format_globalboard_text(db, caller_user_id=4)
+            lines = text.strip().split("\n")
+            self.assertTrue(lines[0].startswith("🌍 <b>GLOBAL PIXEL FRACTION LEADERBOARD</b> 🌍"))
+            self.assertIn("🥇 <b>Player5</b> — 50 pts", text)
+            self.assertIn("🥈 <b>Player4</b> — 40 pts (🔥 1 day streak) ← you", text)
+            self.assertIn("🥉 <b>Player3</b> — 30 pts", text)
+            self.assertIn("4. <b>Player2</b> — 20 pts", text)
+            self.assertIn("5. <b>Player1</b> — 10 pts", text)
+            # Since caller is in top 15, no extra rank footer line added
+            self.assertNotIn("#2 You:", text)
+
+    def test_globalboard_exactly_15_players(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            for i in range(1, 16):
+                db.record_submission(100, i, f"Player{i}", i * 10)
+            
+            # Caller is rank 15 (Player 1, score 10)
+            text = format_globalboard_text(db, caller_user_id=1)
+            lines = text.strip().split("\n")
+            # 1 title line, 1 empty line from \n, 15 player lines = 17 lines total
+            player_lines = [l for l in lines if l and not l.startswith("🌍")]
+            self.assertEqual(len(player_lines), 15)
+            self.assertIn("15. <b>Player1</b> — 10 pts (🔥 1 day streak) ← you", text)
+            self.assertNotIn("#15 You:", text)
+
+    def test_globalboard_more_than_15_caller_outside_top_15(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            # 20 players (scores 200 down to 10)
+            for i in range(1, 21):
+                db.record_submission(100, i, f"Player{i}", i * 10)
+            
+            # Caller is Player 2 (score 20, rank 19 out of 20)
+            text = format_globalboard_text(db, caller_user_id=2)
+            # Only top 15 displayed in main list
+            self.assertIn("🥇 <b>Player20</b> — 200 pts", text)
+            self.assertIn("15. <b>Player6</b> — 60 pts", text)
+            self.assertNotIn("16.", text)
+            # Footer contains caller line
+            self.assertIn("#19 You: 20 pts (🔥 1 day streak)", text)
+
+    def test_globalboard_ties_and_stability(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            # Setup two players with equal scores and equal streaks
+            db.state["users"]["101"] = {
+                "name": "EarlierAlice",
+                "score": 50,
+                "streak": 2,
+                "first_played": "2026-10-25T10:00:00",
+            }
+            db.state["users"]["102"] = {
+                "name": "LaterBob",
+                "score": 50,
+                "streak": 2,
+                "first_played": "2026-10-25T12:00:00",
+            }
+            text = format_globalboard_text(db, caller_user_id=None)
+            lines = [l for l in text.split("\n") if l and not l.startswith("🌍")]
+            self.assertIn("EarlierAlice", lines[0])
+            self.assertIn("LaterBob", lines[1])
+
+    def test_globalboard_caller_zero_points(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            db.record_submission(100, 999, "Scorer", 25)
+            # Caller has not scored (ID 12345 has 0 points)
+            text = format_globalboard_text(db, caller_user_id=12345)
+            self.assertIn("🥇 <b>Scorer</b> — 25 pts", text)
+            self.assertIn("You haven't scored yet. Send /quest to start!", text)
+
+    def test_globalboard_privacy_and_empty_name(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            # HTML special characters in name and empty name
+            db.state["users"]["101"] = {
+                "name": "<Admin&Hacker>",
+                "score": 50,
+                "streak": 1,
+                "first_played": "2026-10-25T10:00:00",
+            }
+            db.state["users"]["102"] = {
+                "name": "   ",
+                "score": 25,
+                "streak": 1,
+                "first_played": "2026-10-25T10:05:00",
+            }
+            text = format_globalboard_text(db, caller_user_id=None)
+            self.assertIn("&lt;Admin&amp;Hacker&gt;", text)
+            self.assertNotIn("<Admin&Hacker>", text)
+            self.assertIn("<b>Player</b>", text)
+            self.assertNotIn("101", text)
+            self.assertNotIn("102", text)
 
 
 if __name__ == "__main__":

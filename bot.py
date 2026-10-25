@@ -22,7 +22,7 @@ from config import (
 )
 from color_engine import analyze_pixel_fraction, compute_dhash, compute_similarity
 from quest_manager import QuestManager
-from database import Database
+from database import Database, format_globalboard_text
 
 # Patch Tornado WebhookAppClass so Render health checks at GET / return 200 OK
 try:
@@ -86,7 +86,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
             InlineKeyboardButton("🎯 Today's Quest", callback_data="cmd_quest"),
-            InlineKeyboardButton("🏆 Leaderboard", callback_data="cmd_leaderboard"),
+            InlineKeyboardButton("🏆 Group", callback_data="cmd_leaderboard"),
+            InlineKeyboardButton("🌍 Global", callback_data="cmd_globalboard"),
         ],
         [
             InlineKeyboardButton("🆔 My ID", callback_data="cmd_myid"),
@@ -101,6 +102,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📖 **Pixel Fraction Commands:**\n\n"
         "• /quest — View today's color quest & Unsplash inspiration\n"
         "• /leaderboard — View current group leaderboard & streaks\n"
+        "• /globalboard — View global rankings across all chats\n"
         "• /myid — View your Telegram numeric ID\n"
         "• /forcequest — (Admin) Force trigger a new quest for demo\n"
         "• /help — Show this help message\n\n"
@@ -186,11 +188,33 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             medal = medals[idx] if idx < len(medals) else "🔹"
             text += f"{medal} **{entry['name']}** — {entry['score']} pts (🔥 {entry['streak']} day streak)\n"
 
+    keyboard = [
+        [InlineKeyboardButton("🌍 Global Board", callback_data="cmd_globalboard")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     if update.callback_query:
-        await update.callback_query.message.reply_text(text, parse_mode="Markdown")
+        await update.callback_query.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
         await update.callback_query.answer()
     else:
-        await update.message.reply_text(text, parse_mode="Markdown")
+        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=reply_markup)
+
+
+async def globalboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Shows global player rankings across all chats."""
+    caller_id = update.effective_user.id if update.effective_user else None
+    text = format_globalboard_text(db, caller_user_id=caller_id)
+
+    keyboard = [
+        [InlineKeyboardButton("🏆 Group Board", callback_data="cmd_leaderboard")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.message.reply_text(text, parse_mode="HTML", reply_markup=reply_markup)
+        await update.callback_query.answer()
+    else:
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=reply_markup)
 
 
 async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -292,6 +316,9 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     elif data == "cmd_leaderboard":
         await leaderboard_command(update, context)
         return
+    elif data == "cmd_globalboard":
+        await globalboard_command(update, context)
+        return
     elif data == "cmd_myid":
         user_id = query.from_user.id
         await query.answer(f"Your User ID: {user_id}", show_alert=True)
@@ -320,18 +347,34 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
 
 
+async def post_init(application):
+    """Sets the Telegram bot command menu."""
+    from telegram import BotCommand
+    try:
+        await application.bot.set_my_commands([
+            BotCommand("quest", "View today's color quest & inspiration"),
+            BotCommand("leaderboard", "View group leaderboard & streaks"),
+            BotCommand("globalboard", "View global leaderboard across all chats"),
+            BotCommand("myid", "View your Telegram numeric ID"),
+            BotCommand("help", "Show game rules & commands"),
+        ])
+    except Exception as e:
+        logger.warning(f"Could not set bot commands: {e}")
+
+
 def main():
     if not TELEGRAM_BOT_TOKEN:
         logger.critical("TELEGRAM_BOT_TOKEN is missing! Set it in .env")
         return
 
-    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     # Register handlers
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("quest", quest_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command))
+    app.add_handler(CommandHandler("globalboard", globalboard_command))
     app.add_handler(CommandHandler("myid", myid_command))
     app.add_handler(CommandHandler("forcequest", forcequest_command))
     app.add_handler(CallbackQueryHandler(button_callback_handler))

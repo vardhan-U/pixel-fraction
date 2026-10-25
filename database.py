@@ -1,4 +1,5 @@
 import json
+import html
 import logging
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -38,15 +39,20 @@ class Database:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
 
+        now_iso = datetime.now(timezone.utc).isoformat()
+        clean_name = user_name.strip() if user_name and user_name.strip() else "Player"
         user_data = self.state["users"].get(uid, {
-            "name": user_name,
+            "name": clean_name,
             "score": 0,
             "streak": 0,
             "last_date": "",
+            "first_played": now_iso,
         })
 
-        # Update display name
-        user_data["name"] = user_name
+        # Update display name and ensure first_played is recorded
+        user_data["name"] = clean_name
+        if "first_played" not in user_data:
+            user_data["first_played"] = now_iso
 
         # Calculate streak
         last_date = user_data.get("last_date", "")
@@ -128,3 +134,104 @@ class Database:
         # Sort descending by score
         leaderboard.sort(key=lambda x: (x["score"], x["streak"]), reverse=True)
         return leaderboard[:limit]
+
+    def get_global_leaderboard(self) -> list[dict]:
+        """
+        Ranks all players across all chats by their total points summed over every chat, descending.
+        Tie-breaker: current streak descending, then earlier first-played time, then user_id.
+        Only players with total score > 0 are ranked.
+        """
+        players = []
+        for uid, udata in self.state.get("users", {}).items():
+            # Sum score over all chats
+            chat_sum = sum(
+                chat.get(str(uid), 0)
+                for chat in self.state.get("chat_scores", {}).values()
+            )
+            total_score = max(chat_sum, udata.get("score", 0))
+            if total_score <= 0:
+                continue
+
+            name = udata.get("name")
+            display_name = name.strip() if (name and str(name).strip()) else "Player"
+
+            players.append({
+                "user_id": str(uid),
+                "name": display_name,
+                "score": total_score,
+                "streak": udata.get("streak", 0),
+                "first_played": udata.get("first_played") or "9999-12-31T23:59:59",
+            })
+
+        # Sort: score desc, streak desc, first_played asc, user_id asc
+        players.sort(
+            key=lambda u: (
+                -u["score"],
+                -u["streak"],
+                u["first_played"],
+                u["user_id"],
+            )
+        )
+        return players
+
+
+def format_globalboard_text(db: Database, caller_user_id: int | str | None = None) -> str:
+    """
+    Formats the global leaderboard into HTML-safe message text according to specification:
+    - Top 15 with medals for top 3, numbers for rest.
+    - If caller is in top 15, marks row with ' ← you' and adds no extra line.
+    - If caller is not in top 15, adds a blank line and '#<rank> You: <score> pts (🔥 <streak> day streak)'.
+    - If caller has no points yet, adds 'You haven't scored yet. Send /quest to start!'.
+    - If nobody has scored, replies 'No scores yet. Be the first!'.
+    """
+    players = db.get_global_leaderboard()
+    if not players:
+        return "No scores yet. Be the first!"
+
+    caller_id_str = str(caller_user_id) if caller_user_id is not None else None
+
+    # Determine caller's rank if they exist in sorted players
+    caller_rank = None
+    caller_entry = None
+    for idx, p in enumerate(players):
+        if caller_id_str and p["user_id"] == caller_id_str:
+            caller_rank = idx + 1
+            caller_entry = p
+            break
+
+    top_15 = players[:15]
+    lines = ["🌍 <b>GLOBAL PIXEL FRACTION LEADERBOARD</b> 🌍\n"]
+
+    for idx, entry in enumerate(top_15):
+        rank = idx + 1
+        if rank == 1:
+            prefix = "🥇"
+        elif rank == 2:
+            prefix = "🥈"
+        elif rank == 3:
+            prefix = "🥉"
+        else:
+            prefix = f"{rank}."
+
+        safe_name = html.escape(entry["name"]) if entry["name"] else "Player"
+        is_caller = (caller_id_str and entry["user_id"] == caller_id_str)
+        you_marker = " ← you" if is_caller else ""
+        lines.append(
+            f"{prefix} <b>{safe_name}</b> — {entry['score']} pts (🔥 {entry['streak']} day streak){you_marker}"
+        )
+
+    # Caller footer handling
+    if caller_id_str:
+        if caller_rank is not None:
+            # Caller is scored
+            if caller_rank > 15:
+                lines.append("")
+                lines.append(
+                    f"#{caller_rank} You: {caller_entry['score']} pts (🔥 {caller_entry['streak']} day streak)"
+                )
+        else:
+            # Caller has not scored yet
+            lines.append("")
+            lines.append("You haven't scored yet. Send /quest to start!")
+
+    return "\n".join(lines)
