@@ -1,0 +1,14 @@
+# Virtual Environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Environment Secrets
+.env
+.env.local
+
+# State / Data cache
+data/
+*.sqlite3
+*.db

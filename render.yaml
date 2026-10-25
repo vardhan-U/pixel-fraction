@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: pixel-fraction
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+      - key: ADMIN_USER_ID
+        sync: false
+      - key: WEBHOOK_URL
+        sync: false
+      - key: PORT
+        value: 10000
