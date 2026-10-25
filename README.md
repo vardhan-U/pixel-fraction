@@ -22,9 +22,15 @@ Pixel Fraction is an interactive Telegram community bot that gamifies everyday s
    - Computes a 64-bit difference hash to compare player uploads against the Unsplash reference photo.
    - Prevents players from simply re-uploading the daily inspiration photo!
 
-4. **Community Engagement & Streaks**:
+4. **Anti-Farming & Fair Play Protection**:
+   - Each player can earn points for only **ONE scored photo per chat per day**.
+   - If a player submits another qualifying photo on the same day, only the difference between the new tier and their previous best is credited (e.g., +10 upgraded to +25 credits +15).
+   - Extra photos can still be submitted for community voting without spamming points.
+
+5. **Community Engagement & Streaks**:
    - Inline interactive voting buttons (`🔥 Creative` and `🎨 Nice Find`).
    - Group leaderboards and consecutive day streak tracking.
+   - Global leaderboard (`/globalboard`) of top 15 players across all chats.
    - Admin demo controls (`/forcequest`) for live presentations.
 
 ---

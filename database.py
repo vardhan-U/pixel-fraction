@@ -33,7 +33,26 @@ class Database:
         except Exception as e:
             logger.error(f"Could not save state file: {e}")
 
+    def _cleanup_stale_daily_best(self, today: str):
+        """Remove daily_best entries from past days so the file doesn't grow forever."""
+        daily_best = self.state.get("daily_best", {})
+        stale_keys = [k for k in daily_best if not k.endswith(f":{today}")]
+        for k in stale_keys:
+            del daily_best[k]
+
     def record_submission(self, chat_id: int, user_id: int, user_name: str, points: int) -> dict:
+        """
+        Records a photo submission with anti-farming protection.
+
+        Each player can earn points for only ONE scored photo per chat per day.
+        If a second qualifying photo scores higher, only the difference is credited.
+        If it scores equal or lower, nothing is awarded.
+
+        Returns a dict with:
+          - All user_data fields (name, score, streak, last_date, first_played)
+          - 'awarded': int — actual points credited this call (0 if duplicate/lower)
+          - 'already_scored_today': int — the previous best score today in this chat (0 if first)
+        """
         uid = str(user_id)
         cid = str(chat_id)
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -54,31 +73,45 @@ class Database:
         if "first_played" not in user_data:
             user_data["first_played"] = now_iso
 
-        # Calculate streak
+        # Calculate streak (once per calendar day, regardless of anti-farming)
         last_date = user_data.get("last_date", "")
         if last_date == today:
-            # Already submitted today; maintain streak
             pass
         elif last_date == yesterday:
-            # Consecutive day
             user_data["streak"] += 1
             user_data["last_date"] = today
         else:
-            # Missed or brand new
             user_data["streak"] = 1
             user_data["last_date"] = today
 
-        # Add points
-        user_data["score"] += points
+        # --- Anti-farming: one best score per player per chat per day ---
+        if "daily_best" not in self.state:
+            self.state["daily_best"] = {}
+        self._cleanup_stale_daily_best(today)
+
+        daily_key = f"{cid}:{uid}:{today}"
+        previous_best = self.state["daily_best"].get(daily_key, 0)
+
+        if points > previous_best:
+            awarded = points - previous_best
+            self.state["daily_best"][daily_key] = points
+        else:
+            awarded = 0
+
+        # Credit only the difference (never negative)
+        user_data["score"] += awarded
         self.state["users"][uid] = user_data
 
-        # Update chat-specific score
         if cid not in self.state["chat_scores"]:
             self.state["chat_scores"][cid] = {}
-        self.state["chat_scores"][cid][uid] = self.state["chat_scores"][cid].get(uid, 0) + points
+        self.state["chat_scores"][cid][uid] = self.state["chat_scores"][cid].get(uid, 0) + awarded
 
         self._save()
-        return user_data
+
+        result = dict(user_data)
+        result["awarded"] = awarded
+        result["already_scored_today"] = previous_best
+        return result
 
     def register_photo_submission(self, submission_id: str, author_id: int):
         self.state["submissions"][submission_id] = {

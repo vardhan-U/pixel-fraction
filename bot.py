@@ -106,6 +106,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• /myid — View your Telegram numeric ID\n"
         "• /forcequest — (Admin) Force trigger a new quest for demo\n"
         "• /help — Show this help message\n\n"
+        "✨ **Fair Play & Scoring:**\n"
+        "• Pass (≥ 15%): +10 pts | Critical Hit (≥ 40%): +25 pts\n"
+        "• Anti-Farming Rule: Each player can earn points for only ONE scored photo per chat per day (keeping your best score). Extra photos can still be submitted for community voting!\n\n"
         "💡 *Tip:* In group chats, simply post a photo and the bot will score it automatically!"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -276,7 +279,18 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if points > 0:
         user_data = db.record_submission(chat.id, user.id, user.first_name, points)
-        streak_text = f"\n🔥 **Streak:** {user_data['streak']} days | 💎 **Total Score:** {user_data['score']} pts"
+        awarded = user_data.get("awarded", 0)
+        previous_best = user_data.get("already_scored_today", 0)
+
+        if previous_best > 0:
+            if awarded > 0:
+                note = f"\n⚡ **Upgraded score by +{awarded} pts!** (New best today: +{points})"
+            else:
+                note = f"\nℹ️ Already scored today (+{previous_best}). Only your best photo counts."
+        else:
+            note = ""
+
+        streak_text = f"{note}\n🔥 **Streak:** {user_data['streak']} days | 💎 **Total Score:** {user_data['score']} pts"
     else:
         streak_text = "\n💡 *Tip: Try getting closer or finding better lighting!*"
 

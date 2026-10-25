@@ -275,6 +275,107 @@ class TestPixelFractionEngine(unittest.TestCase):
             self.assertNotIn("101", text)
             self.assertNotIn("102", text)
 
+    def test_anti_farming_first_photo(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            res = db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=10)
+            self.assertEqual(res["awarded"], 10)
+            self.assertEqual(res["score"], 10)
+            self.assertEqual(res["already_scored_today"], 0)
+            self.assertEqual(db.state["chat_scores"]["100"]["1"], 10)
+
+    def test_anti_farming_second_lower_or_equal_photo(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            # First photo: +10 pts
+            db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=10)
+            # Second photo: same tier (10 pts)
+            res2 = db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=10)
+            self.assertEqual(res2["awarded"], 0)
+            self.assertEqual(res2["already_scored_today"], 10)
+            self.assertEqual(res2["score"], 10)
+            self.assertEqual(db.state["chat_scores"]["100"]["1"], 10)
+
+    def test_anti_farming_second_higher_photo(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            # First photo: +10 pts
+            res1 = db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=10)
+            self.assertEqual(res1["awarded"], 10)
+            self.assertEqual(res1["score"], 10)
+
+            # Second photo: higher tier (+25 pts bonus) -> only difference (+15) credited
+            res2 = db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=25)
+            self.assertEqual(res2["awarded"], 15)
+            self.assertEqual(res2["already_scored_today"], 10)
+            self.assertEqual(res2["score"], 25)
+            self.assertEqual(db.state["chat_scores"]["100"]["1"], 25)
+
+            # Third photo: equal or lower tier (+10 pts) -> 0 awarded
+            res3 = db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=10)
+            self.assertEqual(res3["awarded"], 0)
+            self.assertEqual(res3["already_scored_today"], 25)
+            self.assertEqual(res3["score"], 25)
+
+    def test_anti_farming_new_day_reset(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from datetime import datetime, timezone, timedelta
+
+        day1 = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone.utc)
+        day2 = day1 + timedelta(days=1)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+
+            # Day 1: scores 25 pts
+            with patch("database.datetime") as mock_dt:
+                mock_dt.now.return_value = day1
+                mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
+                res_d1 = db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=25)
+                self.assertEqual(res_d1["awarded"], 25)
+                self.assertEqual(res_d1["score"], 25)
+                self.assertEqual(res_d1["streak"], 1)
+
+            # Day 2: scoring resets, scores 10 pts, streak increments, stale day1 cleaned
+            with patch("database.datetime") as mock_dt:
+                mock_dt.now.return_value = day2
+                mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
+                res_d2 = db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=10)
+                self.assertEqual(res_d2["awarded"], 10)
+                self.assertEqual(res_d2["already_scored_today"], 0)
+                self.assertEqual(res_d2["score"], 35)
+                self.assertEqual(res_d2["streak"], 2)
+                # Verify stale day 1 key is removed from daily_best
+                self.assertNotIn("100:1:2026-10-25", db.state.get("daily_best", {}))
+                self.assertIn("100:1:2026-10-26", db.state.get("daily_best", {}))
+
+    def test_anti_farming_two_different_chats(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = Database(state_file=Path(tmpdir) / "test.json")
+            # Chat A: +10 pts
+            res_a = db.record_submission(chat_id=100, user_id=1, user_name="Alice", points=10)
+            self.assertEqual(res_a["awarded"], 10)
+            self.assertEqual(res_a["score"], 10)
+            self.assertEqual(db.state["chat_scores"]["100"]["1"], 10)
+
+            # Chat B on same day: +25 pts -> scores independently
+            res_b = db.record_submission(chat_id=200, user_id=1, user_name="Alice", points=25)
+            self.assertEqual(res_b["awarded"], 25)
+            self.assertEqual(res_b["already_scored_today"], 0)
+            self.assertEqual(res_b["score"], 35)
+            self.assertEqual(db.state["chat_scores"]["200"]["1"], 25)
+            self.assertEqual(db.state["chat_scores"]["100"]["1"], 10)
+
 
 if __name__ == "__main__":
     unittest.main()
