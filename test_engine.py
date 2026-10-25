@@ -146,6 +146,12 @@ class TestPixelFractionEngine(unittest.TestCase):
             self.assertFalse(bot.is_admin(0))
             self.assertFalse(bot.is_admin(None))
 
+    def test_logger_levels(self):
+        import logging
+        import bot  # imports and configures loggers
+        self.assertGreaterEqual(logging.getLogger("httpx").level, logging.WARNING)
+        self.assertGreaterEqual(logging.getLogger("httpcore").level, logging.WARNING)
+
 
 if __name__ == "__main__":
     unittest.main()

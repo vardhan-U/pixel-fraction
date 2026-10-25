@@ -51,6 +51,9 @@ except Exception as e:
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+# Silence httpx and httpcore to prevent bot tokens from appearing in logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 quest_mgr = QuestManager()
