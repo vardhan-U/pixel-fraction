@@ -140,12 +140,3 @@ Pixel Fraction is an interactive Telegram community bot that gamifies everyday s
 
 ---
 
-## 🎤 3-Minute Demo Pitch (Playful Track)
-
-* **Hook (20s):** "Most chat groups suffer from passive scrolling. Pixel Fraction turns any Telegram group into a real-world scavenger hunt where your surroundings become the game board."
-* **API Integration (60s):** "We combine the Unsplash API to source curated, high-aesthetic color references with custom computer vision that parses the raw pixel fraction in HSV space to score real photos fairly regardless of indoor lighting."
-* **Live Walkthrough (100s):**
-  1. Trigger `/quest` to reveal today's color and Unsplash inspiration photo.
-  2. Take a photo of a nearby object (e.g. coffee mug, notebook, clothing).
-  3. Submit it to the group: watch the bot detect the exact pixel fraction, award points, and add streak bonuses!
-  4. Peers tap `🔥 Creative` or `🎨 Nice Find` buttons to vote in real-time.
